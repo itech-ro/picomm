@@ -18,10 +18,10 @@ func main() {
 
 	jobsQueue := make(map[int]picomm.Job)
 
-	controller := picomm.NewController(jobsChannel, jobsQueue)
-	watcher := picomm.NewWatcher(controller)
+	persistance := picomm.NewPersistance("jobs.dat")
 
-	go watcher.Run()
+	controller := picomm.NewController(jobsChannel, persistance, jobsQueue)
+	controller.Init()
 
 	runner := picomm.NewRunner(jobsChannel, jobsQueue)
 

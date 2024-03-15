@@ -12,6 +12,7 @@ type (
 		jobsChannel  chan Job
 		jobsQueue    map[int]Job
 		isJobRunning bool
+		persistance  *Persistance
 	}
 
 	// Job ...
@@ -26,10 +27,11 @@ type (
 )
 
 // NewController ...
-func NewController(jobsChannel chan Job, jobsQueue map[int]Job) *Controller {
+func NewController(jobsChannel chan Job, persistance *Persistance, jobsQueue map[int]Job) *Controller {
 	return &Controller{
 		jobsChannel: jobsChannel,
 		jobsQueue:   jobsQueue,
+		persistance: persistance,
 	}
 }
 
@@ -53,6 +55,8 @@ func (c *Controller) EndJobs() {
 
 	m.Lock()
 	defer m.Unlock()
+
+	c.persistance.Clear()
 	c.isJobRunning = false
 }
 
@@ -86,5 +90,42 @@ func (c *Controller) ProcessJobs(jobs []Job) ([]Job, error) {
 		returnJobs = append(returnJobs, job)
 		c.jobsChannel <- job
 	}
+
+	c.persistance.Store(returnJobs)
+
 	return returnJobs, nil
+}
+
+// Init ...
+func (c *Controller) Init() error {
+	var jobs []Job
+	persistanceJobs, err := c.persistance.Read()
+
+	if err != nil {
+		return err
+	}
+
+	for _, job := range persistanceJobs {
+		if job.EndTime.Before(time.Now()) {
+			continue
+		}
+
+		duration := 0
+		if job.StartTime.After(time.Now()) {
+			duration = job.Duration
+		} else {
+			diff := job.EndTime.Sub(time.Now())
+			duration = int(diff.Seconds())
+		}
+
+		job.Duration = duration
+		jobs = append(jobs, job)
+	}
+
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	_, err = c.ProcessJobs(jobs)
+	return err
 }
